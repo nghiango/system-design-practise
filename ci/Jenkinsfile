@@ -1,0 +1,64 @@
+// One job per topic (system-design/<topic>): the job name is the topic.
+// Builds, tests and publishes only that topic. Going online is done by system-design/topic-switch.
+pipeline {
+  agent { label 'local-arm64' }
+  options {
+    disableConcurrentBuilds()
+    skipDefaultCheckout(true)
+    timeout(time: 60, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '15'))
+  }
+  parameters {
+    string(name: 'DEPLOY_BRANCH', defaultValue: 'main', description: 'Only this branch may publish')
+    string(name: 'REGISTRY', defaultValue: 'hyperscale-k8s-worker:30500', description: 'Registry host, without scheme')
+    string(name: 'IMAGE_PREFIX', defaultValue: 'hyperscale-k8s-worker:30500/system-design', description: 'Registry host/owner')
+    string(name: 'GITOPS_URL', defaultValue: 'git@github.com:nghiango/hyper-scale-commerce-gitops.git', description: 'GitOps repository (SSH)')
+    string(name: 'GITOPS_BRANCH', defaultValue: 'main')
+    booleanParam(name: 'RUN_INTEGRATION_TESTS', defaultValue: false, description: 'Run integration tests (Testcontainers)')
+  }
+  environment {
+    TOPIC = "${env.JOB_BASE_NAME}"
+  }
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          if (!(env.TOPIC ==~ /[a-z][a-z0-9-]{1,30}/) || !fileExists("topics/${env.TOPIC}/topic.yaml")) {
+            error("Job name '${env.TOPIC}' is not a topic folder under topics/")
+          }
+          env.REVISION = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+          env.SOURCE_BRANCH = sh(script: 'git branch --show-current', returnStdout: true).trim()
+          env.ON_DEPLOY_BRANCH = ((env.BRANCH_NAME ?: env.GIT_LOCAL_BRANCH ?: env.SOURCE_BRANCH) == params.DEPLOY_BRANCH).toString()
+        }
+      }
+    }
+    stage('Unit tests') {
+      steps { sh './gradlew ":$TOPIC:topicTest" --no-daemon' }
+      post { always { junit allowEmptyResults: true, testResults: "topics/${env.TOPIC}/services/*/build/test-results/test/TEST-*.xml" } }
+    }
+    stage('Integration tests') {
+      when { expression { params.RUN_INTEGRATION_TESTS } }
+      steps { sh './gradlew ":$TOPIC:topicIntegrationTest" --no-daemon' }
+      post { always { junit allowEmptyResults: true, testResults: "topics/${env.TOPIC}/services/*/build/test-results/integrationTest/TEST-*.xml" } }
+    }
+    stage('Assemble') {
+      steps { sh './gradlew ":$TOPIC:topicAssemble" --no-daemon' }
+    }
+    stage('Build images') {
+      steps { sh 'PUSH_IMAGES=false bash ci/scripts/build_images.sh "$TOPIC"' }
+    }
+    stage('Publish images') {
+      when { expression { env.ON_DEPLOY_BRANCH == 'true' } }
+      steps { sh 'PUSH_IMAGES=true bash ci/scripts/build_images.sh "$TOPIC"' }
+    }
+    stage('Publish GitOps') {
+      when { expression { env.ON_DEPLOY_BRANCH == 'true' } }
+      steps {
+        sshagent(credentials: ['gitops-write']) {
+          sh 'python3 ci/scripts/publish_topic.py --topic "$TOPIC" --image-prefix "$IMAGE_PREFIX" --revision "$REVISION" --gitops-url "$GITOPS_URL" --gitops-branch "$GITOPS_BRANCH"'
+        }
+      }
+    }
+  }
+}

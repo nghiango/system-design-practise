@@ -1,0 +1,25 @@
+// system-design/topic-switch: choose the single online topic.
+// ACTION and TOPIC are defined on the job by ci/jenkins/register-jobs.groovy (the TOPIC
+// choices come from topics/*), so this file deliberately has no parameters block.
+pipeline {
+  agent { label 'local-arm64' }
+  options {
+    disableConcurrentBuilds()
+    timeout(time: 10, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '30'))
+  }
+  environment {
+    GITOPS_URL = 'git@github.com:nghiango/hyper-scale-commerce-gitops.git'
+    GITOPS_BRANCH = 'main'
+  }
+  stages {
+    stage('Switch') {
+      steps {
+        script { currentBuild.description = params.ACTION == 'activate' ? "activate ${params.TOPIC}" : params.ACTION }
+        sshagent(credentials: ['gitops-write']) {
+          sh 'python3 ci/scripts/topic_switch.py --action "$ACTION" --topic "$TOPIC" --gitops-url "$GITOPS_URL" --gitops-branch "$GITOPS_BRANCH"'
+        }
+      }
+    }
+  }
+}
