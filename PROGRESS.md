@@ -12,7 +12,7 @@ Legend: ✔ done · ◐ in progress · blank = not started · – not applicable
 | Banking Money Transfer |        |          |       |       |          |               |      | not started |
 | Real-Time Auction      |        |          |       |       |          |               |      | not started |
 
-**Next step:** Foundation Task 6, the GitOps ApplicationSet.
+**Next step:** Foundation Task 7, `scripts/topic.sh`.
 
 ## Foundation checklist
 Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2026-11-18-foundation.md)
@@ -22,7 +22,7 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
 - [x] 3. GitOps publish script with safe push
 - [x] 4. Topic switch script
 - [x] 5. Jenkins pipelines and job registration
-- [ ] 6. GitOps ApplicationSet and `topics/active.yaml`
+- [x] 6. GitOps ApplicationSet and `topics/active.yaml` (gitops branch `system-design-topics`, not pushed)
 - [ ] 7. `scripts/topic.sh` operator helper
 - [ ] 8. Platform change: Prometheus/Alloy watch topic namespaces
 - [ ] 9. End-to-end verification on the cluster
@@ -34,3 +34,4 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
 - 2026-11-18 — Task 3: `ci/scripts/publish_topic.py` publishes one topic folder to GitOps, with rebase-and-retry push.
 - 2026-11-18 — Task 4: `ci/scripts/topic_switch.py` (activate / deactivate / status) writes the single `topics/active.yaml` value.
 - 2026-11-18 — Task 5: `ci/Jenkinsfile` (one job per topic), `ci/Jenkinsfile.switch` and `ci/scripts/register_jenkins_jobs.py`.
+- 2026-11-18 — Task 6: ApplicationSet `system-design-topics` and `topics/active.yaml` committed in the GitOps repo (branch `system-design-topics`).
