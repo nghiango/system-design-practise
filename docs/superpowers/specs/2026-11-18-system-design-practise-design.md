@@ -81,8 +81,9 @@ Shared vs isolated infra
 
 On/off mechanism
 - **One flag per topic + Argo ApplicationSet (chosen by user):** an ApplicationSet
-  generates one Argo Application per enabled topic; flipping `enabled` adds/removes
-  it, and a cleanup finalizer removes its resources.
+  generates the Argo Application, and a cleanup finalizer removes a topic's
+  resources when it goes offline. Later refined to a single `active` value so that
+  at most one topic is online (5.3).
 - One Argo Application file per topic: simpler, but "off" means deleting a file and
   there is no single readable switchboard.
 - Repo per topic: rejected (six pipelines, duplicated build code, no learning gain).
@@ -372,7 +373,7 @@ topic jobs and the switch job can commit at the same time.
   `system-design/topic-switch` activates, deactivates and reports status for it.
 - `./gradlew build` passes, with unit tests and Testcontainers integration tests.
 - `helm lint` and `helm template` pass for the topic chart. The ApplicationSet
-  renders only enabled topics.
+  renders exactly the active topic, and nothing when `active: none`.
 - With `active: url-shortener`, Argo shows `topic-url-shortener` Healthy. Create +
   redirect work through port-forward, and a k6 run records numbers in the README.
 - `deactivate` removes the Application, the namespace and the `hyperscale`-side
