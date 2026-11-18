@@ -157,7 +157,7 @@ hyper-scale-commerce-gitops/
 └── topics/                        # NEW: never touched by the commerce release.py
     ├── README.md                  # switchboard explanation + table of topics
     └── url-shortener/
-        ├── topic.yaml             # HUMAN-owned: enabled flag + description
+        ├── topic.yaml             # SWITCH-owned: enabled flag + description (topic-switch job, or a manual edit)
         ├── values-local.yaml      # JENKINS-owned: image tags, revision
         └── chart/                 # JENKINS-owned: copied from app repo
 ```
@@ -165,7 +165,7 @@ hyper-scale-commerce-gitops/
 `topic.yaml` (the on/off switch):
 ```yaml
 name: url-shortener
-enabled: "true"        # set to "false" to switch the topic off
+enabled: "true"        # changed by the Jenkins topic-switch job (or edit by hand)
 description: Capacity estimation, sharding, caching, ID generation
 ```
 
@@ -251,26 +251,62 @@ Under the table, each topic has a short checklist of its concrete tasks, and a
 log line (date, what changed) for every completed step. The row is updated as part
 of every change, not afterwards.
 
-### 5.7 CI/CD
+### 5.7 CI/CD (decided: one job per topic + one switch job)
 
-- A second Jenkins pipeline job, `system-design-practise`, polls
-  `git@github.com:nghiango/system-design-practise.git` (`ci/Jenkinsfile`). It runs
-  on the existing Jenkins controller and `local-arm64` agent, and reuses the
-  existing `gitops-write` credential (same GitOps repo).
-- The job is registered **from this repo**: `ci/jenkins/register-job.groovy` is
-  posted to `http://localhost:8090/scriptText` by `ci/scripts/register-jenkins-job.py`,
-  the same mechanism `hyper-scale-commerce/local-ci/scripts/configure-jenkins.py`
-  uses. Jenkins admin credentials come from environment variables, never from
-  files in the other repo or from Git. Nothing in `hyper-scale-commerce` changes
-  for CI.
-- Stages: changed-topic detection (diff against the last successful commit; if
-  that is unknown, build all) → unit tests → integration tests (optional, as in the
-  existing pipeline) → ARM64 image build/push per changed service → publish.
-- Publish clones the GitOps repo and, for each changed topic only, replaces
-  `topics/<topic>/chart` and rewrites `topics/<topic>/values-local.yaml` with the
-  image tags. It runs `helm lint`, then commits
-  `Deploy topic <topic> <sha> (linux/arm64)`. It **never writes `topic.yaml`**, and
-  never touches `charts/` or `environments/`.
+Jenkins folder `system-design/`, on the existing controller and `local-arm64`
+agent. It reuses the existing `gitops-write` credential (same GitOps repo).
+
+```
+system-design/
+├── url-shortener      # build, test, deploy only this topic   (ci/Jenkinsfile)
+├── flash-sale         # ...one job per folder under topics/
+├── ...
+└── topic-switch       # turn a topic on/off                    (ci/Jenkinsfile.switch)
+```
+
+**Per-topic jobs** (`ci/Jenkinsfile`, shared; the job sets the `TOPIC` environment
+variable):
+- Each job polls `git@github.com:nghiango/system-design-practise.git` and builds
+  only when `topics/<topic>/**` changes, or when shared build files change
+  (`build-logic/**`, `gradle/**`, `settings.gradle.kts`, `build.gradle.kts`,
+  `ci/**`). Shared changes trigger every topic job. A manual "Build Now" always
+  runs.
+- Stages: unit tests (`./gradlew :<topic>:...:test`) → integration tests (optional
+  parameter, as in the existing pipeline) → ARM64 image build/push for each service
+  of the topic → publish.
+- Publish clones the GitOps repo, replaces `topics/<topic>/chart`, and rewrites
+  `topics/<topic>/values-local.yaml` with the image tags. It runs `helm lint`, then
+  commits `Deploy topic <topic> <sha> (linux/arm64)`. It never writes `topic.yaml`,
+  and never touches `charts/` or `environments/`.
+- Each job has its own build history and test report.
+
+**Switch job** (`system-design/topic-switch`, `ci/Jenkinsfile.switch`), which
+replaces hand-editing the flag:
+- Parameters: `TOPIC` (a choice of all topic folders) and `ACTION`
+  (`enable` | `disable` | `status`).
+- `enable` / `disable`: clones the GitOps repo, sets `enabled` in
+  `topics/<topic>/topic.yaml`, and commits `Enable topic <topic>` /
+  `Disable topic <topic>`. Argo then creates or removes the Application. Git stays
+  the single source of truth. A manual edit of `topic.yaml` does the same thing.
+- `enable` fails with a clear message if the topic has never been published
+  (no `chart/` or `values-local.yaml` yet): "run system-design/<topic> first".
+- If the flag already has the requested value, the job succeeds without a commit.
+- `status`: prints a table of every topic, showing its enabled flag and its
+  deployed revision. It makes no commit.
+- The job does not build, deploy images or delete data. `reset` stays a local
+  script that asks for confirmation.
+
+**Job registration from this repo:** `ci/scripts/register-jenkins-jobs.py` posts
+`ci/jenkins/register-jobs.groovy` to `http://localhost:8090/scriptText`, the same
+mechanism `hyper-scale-commerce/local-ci/scripts/configure-jenkins.py` uses. The
+script is idempotent. It creates the folder, one job per `topics/*/` directory and
+the switch job, and refreshes the switch job's `TOPIC` choices. Run it again after
+adding a topic. Jenkins admin credentials come from environment variables, never
+from Git or the other repo. Nothing in `hyper-scale-commerce` changes for CI.
+
+Concurrency: every job that pushes to the GitOps repo retries on a
+non-fast-forward push (pull --rebase, then push again, up to 3 times), because
+topic jobs and the switch job can commit at the same time.
 
 ### 5.8 Observability (decided: one small change in `hyper-scale-commerce`)
 
@@ -311,6 +347,8 @@ of every change, not afterwards.
 
 ## 6. Success criteria for the foundation + URL Shortener
 
+- `system-design/url-shortener` builds, tests, pushes images and commits to GitOps.
+  `system-design/topic-switch` enables, disables and reports status for it.
 - `./gradlew build` passes, with unit tests and Testcontainers integration tests.
 - `helm lint` and `helm template` pass for the topic chart. The ApplicationSet
   renders only enabled topics.
@@ -346,7 +384,10 @@ of every change, not afterwards.
 ## 9. Decisions resolved with the owner
 
 1. Git remote: `git@github.com:nghiango/system-design-practise.git`.
-2. Jenkins: register the job from this repo; no CI change in `hyper-scale-commerce`.
+2. Jenkins: one job per topic plus a `topic-switch` job for on/off, all registered
+   from this repo; no CI change in `hyper-scale-commerce`. Rejected: a single job
+   with a TOPIC dropdown (one mixed build history), and Jenkins auto-detecting
+   changed topics in a single job.
 3. Observability: option A, a one-time platform change in
    `hyper-scale-commerce/local-ci/platform` for metrics and logs (5.8). Rejected:
    per-topic Prometheus/Alloy (extra pods, metrics split from shared dashboards)
