@@ -27,8 +27,11 @@ from becoming overwhelming.
 ## 2. Goals, non-goals, anti-goals
 
 Goals
-- Each topic is independently deployable and can be switched **on/off with one line
-  in Git**.
+- Each topic is independently deployable and can be switched on/off from Jenkins
+  (or with one line in Git).
+- **At most one topic is online at any time.** Activating a topic switches off the
+  one that was running. This keeps the kind cluster's load to one topic and
+  keeps load-test results clean.
 - It is obvious, everywhere (code, Git, cluster, dashboards), which part belongs to
   which topic.
 - Every topic documents requirements, capacity estimate, architecture, technology
@@ -147,48 +150,61 @@ code (for example an idempotency helper), and it is recorded in a decision doc.
 ### 5.3 GitOps repo additions (`hyper-scale-commerce-gitops`)
 
 Everything for a topic lives in one folder, separate from the Jenkins-owned
-`charts/` and `environments/`:
+`charts/` and `environments/`. A single file decides which topic is online:
 
 ```
 hyper-scale-commerce-gitops/
 ├── argocd/
 │   ├── applications.yaml          # unchanged
-│   └── topics-applicationset.yaml # NEW: generates topic-<topic> Applications
+│   └── topics-applicationset.yaml # NEW: generates the one topic-<topic> Application
 └── topics/                        # NEW: never touched by the commerce release.py
-    ├── README.md                  # switchboard explanation + table of topics
+    ├── README.md                  # how switching works + table of topics
+    ├── active.yaml                # SWITCH-owned: which single topic is online
     └── url-shortener/
-        ├── topic.yaml             # SWITCH-owned: enabled flag + description (topic-switch job, or a manual edit)
+        ├── topic.yaml             # description only (name, focus, level)
         ├── values-local.yaml      # JENKINS-owned: image tags, revision
         └── chart/                 # JENKINS-owned: copied from app repo
 ```
 
-`topic.yaml` (the on/off switch):
+`topics/active.yaml` (the switch):
 ```yaml
-name: url-shortener
-enabled: "true"        # changed by the Jenkins topic-switch job (or edit by hand)
-description: Capacity estimation, sharding, caching, ID generation
+# Exactly one topic, or "none". Changed by the Jenkins topic-switch job (or by hand).
+active: url-shortener
 ```
 
+Why one `active` value and not an `enabled` flag per topic: with a single value,
+two topics can never be enabled at once, whoever edits it. There's no rule that
+someone has to remember or that a script has to check.
+
 ApplicationSet:
-- Git **files** generator over `topics/*/topic.yaml`, with a `selector` that keeps
-  only `enabled: "true"`.
-- Template: Application `topic-{{name}}`, source path `topics/{{name}}/chart`, value
-  file `../values-local.yaml`, destination namespace `topic-{{name}}`, labels
-  `system-design/topic: {{name}}`, finalizer
+- Git **files** generator over `topics/active.yaml`, with a `selector`
+  (`active NotIn [none]`). It therefore produces zero or one Application.
+- Template: Application `topic-{{active}}`, source path `topics/{{active}}/chart`,
+  value file `../values-local.yaml`, destination namespace `topic-{{active}}`,
+  label `system-design/topic: {{active}}`, finalizer
   `resources-finalizer.argocd.argoproj.io`, automated sync with selfHeal and
   **prune enabled** (a topic owns only stateless resources, so pruning is safe and
   keeps "off" clean).
 - Applied once with `kubectl apply -f argocd/topics-applicationset.yaml`, the same
   way as the existing `applications.yaml`.
 
-Switching **off**: the Application is deleted → the finalizer removes the
-namespace, Deployments and the topic's NetworkPolicies in `hyperscale`. The topic's
-database, Kafka topics and Redis keys stay on the shared infra, so data survives.
-Switching **on** recreates everything and reuses that data. A per-topic `reset` in
+**No overlap during a switch (A → B).** Argo deletes `topic-A` and creates `topic-B`
+at about the same moment. To make sure A is fully gone before B starts, every
+topic chart has a first **PreSync hook Job** called `wait-for-exclusive`. It polls
+until no namespace other than its own carries the label `system-design/topic`.
+It uses a tiny read-only ClusterRole: list namespaces. It times out after
+5 minutes with a clear message. A namespace only disappears once all its pods
+have terminated, so B's services start only after A's have stopped.
+
+Switching **off** (`active: none`), or switching to another topic: the old
+Application is deleted → the finalizer removes its namespace, Deployments and the
+topic's NetworkPolicies in `hyperscale`. The topic's database, Kafka topics and
+Redis keys stay on the shared infra, so data survives. Activating it again
+recreates everything and reuses that data. A per-topic `reset` in
 `scripts/topic.sh` (drop DB / delete Kafka topics / delete Redis keys by prefix)
 is the explicit way to wipe data, and it asks for confirmation.
 
-Warning (README): deleting the ApplicationSet itself switches off all topics.
+Warning (README): deleting the ApplicationSet itself takes the active topic offline.
 
 ### 5.4 What each topic chart contains
 
@@ -281,18 +297,23 @@ variable):
 - Each job has its own build history and test report.
 
 **Switch job** (`system-design/topic-switch`, `ci/Jenkinsfile.switch`), which
-replaces hand-editing the flag:
-- Parameters: `TOPIC` (a choice of all topic folders) and `ACTION`
-  (`enable` | `disable` | `status`).
-- `enable` / `disable`: clones the GitOps repo, sets `enabled` in
-  `topics/<topic>/topic.yaml`, and commits `Enable topic <topic>` /
-  `Disable topic <topic>`. Argo then creates or removes the Application. Git stays
-  the single source of truth. A manual edit of `topic.yaml` does the same thing.
-- `enable` fails with a clear message if the topic has never been published
+replaces hand-editing `active.yaml`:
+- Parameters: `ACTION` (`activate` | `deactivate` | `status`) and `TOPIC` (a choice
+  of all topic folders; used by `activate`).
+- `activate`: clones the GitOps repo, writes `active: <topic>` to
+  `topics/active.yaml`, and commits `Activate topic <topic> (was <previous>)`.
+  Whatever was online before goes offline in the same commit. The
+  `wait-for-exclusive` hook makes sure the two never run together.
+- `deactivate`: writes `active: none` and commits `Deactivate topic <previous>`.
+- `activate` fails with a clear message if the topic has never been published
   (no `chart/` or `values-local.yaml` yet): "run system-design/<topic> first".
-- If the flag already has the requested value, the job succeeds without a commit.
-- `status`: prints a table of every topic, showing its enabled flag and its
-  deployed revision. It makes no commit.
+- If the requested state is already in place, the job succeeds without a commit.
+- `status`: prints the active topic, plus each topic's last deployed revision. It
+  makes no commit.
+- Git stays the single source of truth; editing `active.yaml` by hand does the
+  same thing.
+- Per-topic jobs still publish while their topic is offline. The new version is
+  staged in Git and goes live the next time that topic is activated.
 - The job does not build, deploy images or delete data. `reset` stays a local
   script that asks for confirmation.
 
@@ -348,15 +369,18 @@ topic jobs and the switch job can commit at the same time.
 ## 6. Success criteria for the foundation + URL Shortener
 
 - `system-design/url-shortener` builds, tests, pushes images and commits to GitOps.
-  `system-design/topic-switch` enables, disables and reports status for it.
+  `system-design/topic-switch` activates, deactivates and reports status for it.
 - `./gradlew build` passes, with unit tests and Testcontainers integration tests.
 - `helm lint` and `helm template` pass for the topic chart. The ApplicationSet
   renders only enabled topics.
-- With `enabled: "true"`, Argo shows `topic-url-shortener` Healthy. Create +
+- With `active: url-shortener`, Argo shows `topic-url-shortener` Healthy. Create +
   redirect work through port-forward, and a k6 run records numbers in the README.
-- Flipping to `"false"` removes the Application, the namespace and the
-  `hyperscale`-side policies. Flipping back restores the service, and existing
-  links still resolve.
+- `deactivate` removes the Application, the namespace and the `hyperscale`-side
+  policies. `activate` restores the service, and existing links still resolve.
+- Exclusivity: a second topic chart exists only once Flash Sale is built. Until
+  then, the `wait-for-exclusive` hook is verified by creating a dummy namespace
+  labelled `system-design/topic: dummy` and checking that the URL Shortener sync
+  waits until it is deleted.
 - The existing `hyperscale-local*` Applications stay Healthy and unchanged
   throughout.
 - `PROGRESS.md` and the topic README are complete for this stage.
@@ -388,6 +412,11 @@ topic jobs and the switch job can commit at the same time.
    from this repo; no CI change in `hyper-scale-commerce`. Rejected: a single job
    with a TOPIC dropdown (one mixed build history), and Jenkins auto-detecting
    changed topics in a single job.
+4. At most one topic online: a single `topics/active.yaml` value plus a
+   `wait-for-exclusive` PreSync hook (5.3). Rejected: an `enabled` flag per topic
+   with a check in the switch job (manual edits could still enable two), and
+   giving Jenkins cluster access to wait for the old topic itself (breaks the
+   rule that Jenkins only writes Git).
 3. Observability: option A, a one-time platform change in
    `hyper-scale-commerce/local-ci/platform` for metrics and logs (5.8). Rejected:
    per-topic Prometheus/Alloy (extra pods, metrics split from shared dashboards)
