@@ -12,14 +12,14 @@ Legend: ✔ done · ◐ in progress · blank = not started · – not applicable
 | Banking Money Transfer |        |          |       |       |          |               |      | not started |
 | Real-Time Auction      |        |          |       |       |          |               |      | not started |
 
-**Next step:** Foundation Task 3, the GitOps publish script.
+**Next step:** Foundation Task 4, the topic switch script.
 
 ## Foundation checklist
 Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2026-11-18-foundation.md)
 
 - [x] 1. Gradle monorepo, `sd.spring-service` convention, tracker and docs skeleton
 - [x] 2. Generic topic Helm chart
-- [ ] 3. GitOps publish script with safe push
+- [x] 3. GitOps publish script with safe push
 - [ ] 4. Topic switch script
 - [ ] 5. Jenkins pipelines and job registration
 - [ ] 6. GitOps ApplicationSet and `topics/active.yaml`
@@ -31,3 +31,4 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
 - 2026-11-18 — Design approved; foundation plan written.
 - 2026-11-18 — Task 1: Gradle monorepo with topic discovery and the `sd.spring-service` convention.
 - 2026-11-18 — Task 2: generic topic chart (`deploy/topic-chart`) with exclusivity wait, DB/Kafka bootstrap and network policies.
+- 2026-11-18 — Task 3: `ci/scripts/publish_topic.py` publishes one topic folder to GitOps, with rebase-and-retry push.
