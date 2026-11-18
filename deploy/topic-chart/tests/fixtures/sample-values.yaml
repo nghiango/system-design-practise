@@ -1,0 +1,7 @@
+topic: sample
+kafka:
+  topics:
+    - name: sample.thing.created
+      partitions: 3
+services:
+  - name: api
