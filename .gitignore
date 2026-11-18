@@ -1,0 +1,28 @@
+# Java / Gradle
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+.gradle/
+.kotlin/
+build/
+out/
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Helm dependency artefacts
+deploy/**/charts/*.tgz
+
+# Secrets and local env
+.env
+.env.*
+
+# Agent scratch space
+.superpowers/
