@@ -1,6 +1,6 @@
 # System Design Practise — Foundation Design
 
-Status: draft for approval · Date: 2026-11-18
+Status: awaiting approval · Date: 2026-11-18
 
 ## 1. Intent
 
@@ -253,7 +253,16 @@ of every change, not afterwards.
 
 ### 5.7 CI/CD
 
-- A second Jenkins pipeline job polls `system-design-practise` (`ci/Jenkinsfile`).
+- A second Jenkins pipeline job, `system-design-practise`, polls
+  `git@github.com:nghiango/system-design-practise.git` (`ci/Jenkinsfile`). It runs
+  on the existing Jenkins controller and `local-arm64` agent, and reuses the
+  existing `gitops-write` credential (same GitOps repo).
+- The job is registered **from this repo**: `ci/jenkins/register-job.groovy` is
+  posted to `http://localhost:8090/scriptText` by `ci/scripts/register-jenkins-job.py`,
+  the same mechanism `hyper-scale-commerce/local-ci/scripts/configure-jenkins.py`
+  uses. Jenkins admin credentials come from environment variables, never from
+  files in the other repo or from Git. Nothing in `hyper-scale-commerce` changes
+  for CI.
 - Stages: changed-topic detection (diff against the last successful commit; if
   that is unknown, build all) → unit tests → integration tests (optional, as in the
   existing pipeline) → ARM64 image build/push per changed service → publish.
@@ -263,13 +272,27 @@ of every change, not afterwards.
   `Deploy topic <topic> <sha> (linux/arm64)`. It **never writes `topic.yaml`**, and
   never touches `charts/` or `environments/`.
 
-### 5.8 Observability
+### 5.8 Observability (decided: one small change in `hyper-scale-commerce`)
 
-Services expose `/actuator/prometheus` and send traces to the existing collector
-(`otel-collector.hyperscale.svc:9411`). Today Prometheus and Alloy only watch
-namespace `hyperscale`. Their config is generated from
-`hyper-scale-commerce/local-ci/platform`, so it must be widened to `topic-*`
-namespaces there (see Open questions).
+- **Traces:** services send Zipkin/OTLP traces to the existing collector
+  (`otel-collector.hyperscale.svc:9411`). The collector already accepts any
+  namespace; each topic chart adds an allow policy in `hyperscale` for it.
+- **Metrics and logs:** a one-time change in
+  `hyper-scale-commerce/local-ci/platform` (the source of the generated platform
+  chart; editing the GitOps copy would be overwritten on the next platform release):
+  - Prometheus gets a scrape job `topics` (`kubernetes_sd_configs` role endpoints,
+    all namespaces, keep namespace `topic-.*` and port name `http`, path
+    `/actuator/prometheus`) and copies the `system-design/topic` label to a `topic`
+    label.
+  - Alloy pod discovery also covers `topic-.*` namespaces and copies the same `topic`
+    label.
+  - RBAC: cluster-wide **read-only** ClusterRole (get/list/watch on pods, endpoints,
+    services, and pods/log for Alloy), added next to the existing namespace Roles.
+  - The existing `hyperscale` scrape job and its log selection stay as they are.
+  - That change is released with Jenkins `RELEASE_SCOPE=platform`.
+- Grafana: one dashboard per topic, filtered by the `topic` label. Logs are queried
+  with `{namespace="topic-<topic>"}`.
+- No per-topic Prometheus or Alloy pods.
 
 ### 5.9 First topic: URL Shortener (outline; detailed in its own README)
 
@@ -320,9 +343,11 @@ namespaces there (see Open questions).
 - Changed-topic detection details in the Jenkinsfile.
 - Resource requests, replica counts, and partition counts per Kafka topic.
 
-## 9. Open questions (need the owner)
+## 9. Decisions resolved with the owner
 
-1. GitHub remote for this repo (Argo and Jenkins need it).
-2. Approval to make two small one-time changes in `hyper-scale-commerce`: register
-   the second Jenkins job in `local-ci/jenkins/configure.groovy`, and widen
-   Prometheus/Alloy in `local-ci/platform` to `topic-*` namespaces.
+1. Git remote: `git@github.com:nghiango/system-design-practise.git`.
+2. Jenkins: register the job from this repo; no CI change in `hyper-scale-commerce`.
+3. Observability: option A, a one-time platform change in
+   `hyper-scale-commerce/local-ci/platform` for metrics and logs (5.8). Rejected:
+   per-topic Prometheus/Alloy (extra pods, metrics split from shared dashboards)
+   and k6-only metrics (no server-side view).
