@@ -1,3 +1,7 @@
+import os
+import subprocess
+import tempfile
+import textwrap
 import unittest
 
 from chart_docs import CHART, FIXTURE, ROOT, by_name, helm_lint, kinds, one, render, render_error
@@ -37,6 +41,36 @@ class TopicChartTest(unittest.TestCase):
     def test_wait_job_excludes_own_namespace(self):
         self.assertIn("labelSelector=system-design/topic,system-design/topic!=sample",
                       by_name(render(FIXTURE), "wait-for-exclusive", "Job").text)
+
+    def run_wait_script(self, api_body):
+        """Run the rendered wait script with stub curl/date/sleep; api_body is what the API server returns."""
+        text = by_name(render(FIXTURE), "wait-for-exclusive", "Job").text
+        script = textwrap.dedent(text.split("- |\n", 1)[1].split("\n          resources:", 1)[0])
+        with tempfile.TemporaryDirectory() as tmp:
+            stubs = {"curl": f"cat <<'EOF'\n{api_body}\nEOF",
+                     "date": f'n=$(cat {tmp}/t 2>/dev/null || echo 0); echo $((n + 100)) > {tmp}/t; echo $n',
+                     "sleep": "true"}
+            for name, body in stubs.items():
+                path = os.path.join(tmp, name)
+                with open(path, "w") as f:
+                    f.write(f"#!/bin/sh\n{body}\n")
+                os.chmod(path, 0o755)
+            env = dict(os.environ, PATH=f"{tmp}:{os.environ['PATH']}")
+            return subprocess.run(["/bin/sh", "-c", script], env=env, text=True, timeout=10,
+                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    def test_wait_job_continues_when_api_lists_no_other_topic(self):
+        # The API server pretty-prints JSON ("items": [] with a space).
+        r = self.run_wait_script('{\n  "kind": "NamespaceList",\n  "items": []\n}')
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("no other topic online", r.stdout)
+
+    def test_wait_job_names_blocking_topic_and_times_out(self):
+        r = self.run_wait_script('{\n  "items": [\n    {\n      "metadata": {\n'
+                                 '        "name": "topic-flash-sale",\n        "uid": "x"\n      }\n    }\n  ]\n}')
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("still online: topic-flash-sale", r.stdout)
+        self.assertIn("timed out", r.stdout)
 
     def test_wait_job_reports_blocking_namespaces(self):
         t = by_name(render(FIXTURE), "wait-for-exclusive", "Job").text

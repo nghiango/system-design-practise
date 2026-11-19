@@ -18,6 +18,10 @@ pipeline {
   }
   environment {
     TOPIC = "${env.JOB_BASE_NAME}"
+    // Explicit binding: on a job's first build, parameters are not exported to the shell yet.
+    IMAGE_PREFIX = "${params.IMAGE_PREFIX}"
+    GITOPS_URL = "${params.GITOPS_URL}"
+    GITOPS_BRANCH = "${params.GITOPS_BRANCH}"
   }
   stages {
     stage('Checkout') {
