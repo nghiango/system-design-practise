@@ -36,6 +36,12 @@ class TopicSwitchTest(unittest.TestCase):
     def test_missing_active_file_means_none(self):
         self.assertEqual(read_active(self.gitops), "none")
 
+    def test_malformed_active_file_fails_loudly(self):
+        self.active_file().parent.mkdir(parents=True, exist_ok=True)
+        self.active_file().write_text("active: foo # extra junk\n")
+        with self.assertRaises(SwitchError):
+            read_active(self.gitops)
+
     def test_activate_from_none(self):
         publish_fixture(self.gitops, "url-shortener")
         self.assertEqual(activate(self.gitops, "url-shortener"), "Activate topic url-shortener (was none)")

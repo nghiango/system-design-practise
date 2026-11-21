@@ -22,8 +22,13 @@ def read_active(gitops: Path) -> str:
     path = gitops / ACTIVE_FILE
     if not path.is_file():
         return NONE
-    match = re.search(r"^active:\s*\"?([a-z0-9-]+)\"?\s*$", path.read_text(), re.MULTILINE)
-    return match.group(1) if match else NONE
+    text = path.read_text()
+    match = re.search(r"^active:\s*\"?([a-z0-9-]+)\"?\s*$", text, re.MULTILINE)
+    if match:
+        return match.group(1)
+    if text.strip():
+        raise SwitchError(f"{ACTIVE_FILE} is malformed (expected 'active: <topic>|none'); refusing to guess")
+    return NONE
 
 
 def _write_active(gitops: Path, value: str) -> None:

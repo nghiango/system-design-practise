@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import tempfile
 import textwrap
@@ -12,7 +13,11 @@ SHA = "a" * 40
 class TopicChartTest(unittest.TestCase):
     def test_every_resource_labelled_with_topic(self):
         for d in render(FIXTURE):
-            self.assertIn("system-design/topic: sample", d.text, f"{d.kind}/{d.name}")
+            labels = re.search(r"^metadata:\n(?:  .*\n)*?  labels:\n(?P<labels>(?:    .*\n)+)",
+                               d.text, re.M)
+            self.assertIsNotNone(labels, f"{d.kind}/{d.name} has no metadata.labels")
+            self.assertIn("system-design/topic: sample", labels.group("labels"),
+                          f"{d.kind}/{d.name}")
 
     def test_namespace_is_topic_prefixed_and_first(self):
         ns = one(render(FIXTURE), "Namespace")
@@ -24,6 +29,20 @@ class TopicChartTest(unittest.TestCase):
     def test_kafka_topic_without_prefix_fails(self):
         self.assertIn("must start with 'sample.'",
                       render_error(FIXTURE, "--set", "kafka.topics[0].name=other.x"))
+
+    def test_kafka_topic_with_shell_chars_fails(self):
+        self.assertIn("only letters, digits",
+                      render_error(FIXTURE, "--set", 'kafka.topics[0].name=sample.x\\";x'))
+
+    def test_invalid_service_name_fails(self):
+        self.assertIn("service name",
+                      render_error(FIXTURE, "--set", "services[0].name=bad name",
+                                   "--set", "services[0].image=x"))
+
+    def test_invalid_env_key_fails(self):
+        self.assertIn("env key",
+                      render_error(FIXTURE, "--set", "services[0].name=ok",
+                                   "--set", "services[0].env.bad-key=v"))
 
     def test_shared_policies_live_in_hyperscale(self):
         p = by_name(render(FIXTURE), "topic-sample-allow-shared-infra")
@@ -60,7 +79,7 @@ class TopicChartTest(unittest.TestCase):
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
     def test_wait_job_continues_when_api_lists_no_other_topic(self):
-        # The API server pretty-prints JSON ("items": [] with a space).
+        # The API server returns compact JSON for empty lists and spaced JSON otherwise; the regex must accept both.
         r = self.run_wait_script('{\n  "kind": "NamespaceList",\n  "items": []\n}')
         self.assertEqual(r.returncode, 0, r.stdout)
         self.assertIn("no other topic online", r.stdout)

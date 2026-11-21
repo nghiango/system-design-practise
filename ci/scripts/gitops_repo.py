@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List
 
 TOPIC_RE = re.compile(r"^[a-z][a-z0-9-]{1,30}$")
+BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 JENKINS_IDENTITY = ["-c", "user.name=Jenkins local CI", "-c", "user.email=jenkins@localhost"]
 KNOWN_HOSTS = Path(__file__).resolve().parents[1] / "jenkins" / "github_known_hosts"
 
@@ -34,8 +35,14 @@ def run_git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedPr
     return result
 
 
+def validate_branch(branch: str) -> str:
+    if not isinstance(branch, str) or not BRANCH_RE.fullmatch(branch) or ".." in branch:
+        raise ValueError(f"invalid branch {branch!r}")
+    return branch
+
+
 def clone(url: str, branch: str, dest: Path) -> Path:
-    heads = run_git(dest.parent, "ls-remote", "--heads", url, branch).stdout.strip()
+    heads = run_git(dest.parent, "ls-remote", "--heads", url, validate_branch(branch)).stdout.strip()
     if heads:
         run_git(dest.parent, "clone", "--single-branch", "--branch", branch, url, str(dest))
     else:
@@ -46,6 +53,7 @@ def clone(url: str, branch: str, dest: Path) -> Path:
 
 def commit_and_push(repo: Path, paths: List[str], message: str, branch: str, retries: int = 3) -> bool:
     """Commit `paths` and push; on a rejected push, rebase onto the remote and retry."""
+    validate_branch(branch)
     present = [p for p in paths if (repo / p).exists() or run_git(repo, "ls-files", "--", p).stdout.strip()]
     if not present:
         return False
@@ -59,5 +67,7 @@ def commit_and_push(repo: Path, paths: List[str], message: str, branch: str, ret
             return True
         if attempt == retries:
             raise RuntimeError(f"push failed after {retries} retries:\n{push.stdout}")
-        run_git(repo, "pull", "--rebase", "origin", branch, check=False)
+        # Rebase only when the remote branch exists; an orphan first push has no merge base.
+        if run_git(repo, "ls-remote", "--heads", "origin", branch).stdout.strip():
+            run_git(repo, "pull", "--rebase", "origin", branch, check=False)
     return False

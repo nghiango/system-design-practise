@@ -4,7 +4,7 @@ from pathlib import Path
 
 from helpers import clone_of, git, log_subjects, make_remote
 
-from gitops_repo import commit_and_push, validate_topic
+from gitops_repo import commit_and_push, validate_branch, validate_topic
 
 
 class GitopsRepoTest(unittest.TestCase):
@@ -12,6 +12,13 @@ class GitopsRepoTest(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
         self.remote = make_remote(self.tmp)
+
+    def test_validate_branch(self):
+        self.assertEqual(validate_branch("main"), "main")
+        self.assertEqual(validate_branch("release/2026-11"), "release/2026-11")
+        for bad in ("--upload-pack=/bin/sh", "-b", "..", "a..b", "sp ace"):
+            with self.assertRaises(ValueError):
+                validate_branch(bad)
 
     def tearDown(self):
         self._tmp.cleanup()

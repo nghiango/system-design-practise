@@ -47,6 +47,11 @@ case "$cmd" in
     fi
     read -r -p "Type $topic to delete its database, Kafka topics and Redis keys: " answer
     [[ "$answer" == "$topic" ]] || { echo "aborted" >&2; exit 1; }
+    # Re-check: the topic may have been activated while the prompt waited.
+    if k get ns "topic-$topic" >/dev/null 2>&1; then
+      echo "topic $topic came online; aborting reset" >&2
+      exit 1
+    fi
     db=${topic//-/_}
     primary=$(k -n hyperscale get pod -l app.kubernetes.io/component=postgres-ha,role=primary -o name | head -n1)
     [[ -n "$primary" ]] || { echo "no Postgres primary found" >&2; exit 1; }

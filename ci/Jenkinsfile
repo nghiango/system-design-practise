@@ -10,7 +10,7 @@ pipeline {
   }
   parameters {
     string(name: 'DEPLOY_BRANCH', defaultValue: 'main', description: 'Only this branch may publish')
-    string(name: 'REGISTRY', defaultValue: 'hyperscale-k8s-worker:30500', description: 'Registry host, without scheme')
+
     string(name: 'IMAGE_PREFIX', defaultValue: 'hyperscale-k8s-worker:30500/system-design', description: 'Registry host/owner')
     string(name: 'GITOPS_URL', defaultValue: 'git@github.com:nghiango/hyper-scale-commerce-gitops.git', description: 'GitOps repository (SSH)')
     string(name: 'GITOPS_BRANCH', defaultValue: 'main')
