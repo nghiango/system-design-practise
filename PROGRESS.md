@@ -5,7 +5,7 @@ Legend: ✔ done · ◐ in progress · blank = not started · – not applicable
 | Topic                  | Design | Services | Tests | Chart | Deployed | Load evidence | Docs | Status      |
 |------------------------|--------|----------|-------|-------|----------|---------------|------|-------------|
 | Foundation             |   ✔    |    –     |   ✔   |   ✔   |    ✔     |      –        |  ✔   | done        |
-| URL Shortener          |        |          |       |       |          |               |      | not started |
+| URL Shortener          |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Flash Sale             |        |          |       |       |          |               |      | not started |
 | Notification System    |        |          |       |       |          |               |      | not started |
 | Ticket Booking         |        |          |       |       |          |               |      | not started |
@@ -44,3 +44,4 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   - Observability: Loki returns topic job logs with `topic="url-shortener"`; Prometheus has the `topics` job loaded (no targets yet: no services); existing targets 4/4 up. RBAC: no secrets access, no write verbs.
   - `topic-switch` #2 deactivate → Application and namespace removed in ~110 s; shared-namespace policies and topic ClusterRoles removed; database and Kafka topic kept.
   - Bugs found and fixed (`44ef343`): wait script did not match pretty-printed API JSON; first build of a new topic job had no `IMAGE_PREFIX`.
+- 2026-11-21 — URL Shortener services: `link-api` (POST/GET /api/links, Flyway V1 schema, click-counter Kafka consumer, `links.created` metric) and `redirect` (GET /{code} cache-aside via Redis with 1h url / 60s NOTFOUND sentinel, best-effort click event to `url-shortener.link.clicked`). Postgres sequence + Base62 codes (decision 001); Kafka upsert counting (decision 002). Unit + Testcontainers integration tests, k6 script, ARM64 Dockerfiles.

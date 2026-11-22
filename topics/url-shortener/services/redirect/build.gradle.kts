@@ -1,0 +1,11 @@
+plugins { id("sd.spring-service") }
+
+dependencies {
+  implementation("org.springframework.boot:spring-boot-starter-web")
+  implementation("org.springframework.boot:spring-boot-starter-jdbc")
+  implementation("org.springframework.boot:spring-boot-starter-data-redis")
+  implementation("org.springframework.boot:spring-boot-starter-kafka")
+  runtimeOnly("org.postgresql:postgresql")
+
+  integrationTestImplementation("org.testcontainers:postgresql:1.21.3")
+}
