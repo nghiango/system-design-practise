@@ -88,3 +88,8 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   consumer, history API). Postgres row locking (decision 001); lazy guards + sweeper (decision 002).
   Unit + Testcontainers tests (100-thread same-seat race → exactly 1 winner), k6 book.js,
   ARM64 Dockerfiles. Remaining for "done": deploy + k6 load evidence.
+- 2026-11-24 — Ticket Booking live: booking-api + booking-worker via Jenkins #1 / topic-switch #6.
+  Verified: atomic hold (alice 200, bob 409 same seat), confirm->BOOKED+PAID, declined payment 402
+  frees the seat (re-hold 200), HELD/CONFIRMED/DECLINED events audited via Kafka booking_history.
+  Integration: 100 threads hold same seat -> exactly 1 wins; sweeper frees expired holds.
+  Remaining for "done": k6 load evidence (topics/ticket-booking/load/book.js).
