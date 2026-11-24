@@ -77,3 +77,8 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   services. Unit + Testcontainers integration tests (22 notifications → all terminal, dup submit
   → same id + one event), k6 submit-and-poll script, ARM64 Dockerfiles.
   Remaining for "done": deploy + k6 load evidence (`topics/notification/load/notify.js`).
+- 2026-11-24 — Notification live: notify-api + sender-worker via Jenkins #1 / topic-switch #5.
+  Verified: normal -> SENT (0 attempts), flaky -> SENT (1 attempt via notification.retry),
+  permanent-fail -> DEAD, duplicate idempotency key -> same id (no double-send).
+  Redis Lua token bucket (10/s/channel, Redis TIME refill), guarded status machine, DLQ topic.
+  Prometheus targets up. Remaining for "done": k6 load evidence (topics/notification/load/notify.js).
