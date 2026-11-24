@@ -58,3 +58,9 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   Kafka order events + idempotent consumer (decision 002). Unit + Testcontainers integration tests (200 racing
   buyers on stock=100 → exactly 100 accepted), k6 oversell script, ARM64 Dockerfiles.
   Remaining for "done": deploy + k6 load evidence (`topics/flash-sale/load/seckill.js`).
+- 2026-11-24 — Flash Sale live: seckill-api + order-worker via Jenkins #1 / topic-switch #4.
+  Exclusivity verified live: flash-sale wait job held until topic-url-shortener was fully removed (~60s),
+  then db-init/kafka/services started. url-shortener's database preserved after switch-off.
+  Seckill evidence: stock=3 → 3×202 accepted + 1×409 sold out; orders persisted idempotently via Kafka.
+  Integration test: 200 threads on stock=100 → exactly 100 accepted. Prometheus topics targets up.
+  Remaining for "done": k6 oversell evidence (topics/flash-sale/load/seckill.js).
