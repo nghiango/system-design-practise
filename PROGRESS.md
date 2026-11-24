@@ -109,3 +109,7 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   ring transfers → total conserved, no negatives; outbox→relay→consumer→drift 0),
   k6 transfer.js with reconciliation teardown, ARM64 Dockerfiles.
   Remaining for "done": deploy + k6 load evidence (`topics/banking-transfer/load/transfer.js`).
+- 2026-11-24 — Banking Transfer live: transfer-api + ledger-worker via Jenkins #1 / topic-switch #7.
+  Verified: transfer 30 alice->bob COMPLETED; replay same key -> same id, replayed:true (no double-post);
+  overdraw -> 422 REJECTED; outbox relay -> ledger_audit; reconciliation drift=0 on both axes.
+  Opening-balance CREDIT ledgered so seeded accounts reconcile. Remaining: k6 (load/transfer.js).
