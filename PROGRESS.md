@@ -7,7 +7,7 @@ Legend: ✔ done · ◐ in progress · blank = not started · – not applicable
 | Foundation             |   ✔    |    –     |   ✔   |   ✔   |    ✔     |      –        |  ✔   | done        |
 | URL Shortener          |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Flash Sale             |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
-| Notification System    |        |          |       |       |          |               |      | not started |
+| Notification System    |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Ticket Booking         |        |          |       |       |          |               |      | not started |
 | Banking Money Transfer |        |          |       |       |          |               |      | not started |
 | Real-Time Auction      |        |          |       |       |          |               |      | not started |
@@ -64,3 +64,16 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   Seckill evidence: stock=3 → 3×202 accepted + 1×409 sold out; orders persisted idempotently via Kafka.
   Integration test: 200 threads on stock=100 → exactly 100 accepted. Prometheus topics targets up.
   Remaining for "done": k6 oversell evidence (topics/flash-sale/load/seckill.js).
+- 2026-11-24 — Notification services: `notify-api` (POST /api/notifications idempotent submit via
+  UNIQUE idempotency_key + INSERT ON CONFLICT DO NOTHING — 201 fresh / 200 existing, publish
+  {id,attempt:0} to `notification.requested`, GET /api/notifications/{id},
+  `notifications.submitted`/`notifications.deduplicated` metrics) and `sender-worker`
+  (@KafkaListener on `notification.requested`+`notification.retry` group `<prefix>sender`, Redis Lua
+  token bucket `rate:<channel>` 10/s — throttled requeues same attempt, guarded status machine
+  QUEUED→SENDING→SENT / retry attempts+1 / DEAD+`notification.dlq` at 3rd attempt or permanent
+  error, `notifications.sent`/`dead`/`retried` metrics, same GET). Retry topics (decision 001);
+  Lua token bucket + at-least-once/idempotent delivery (decision 002). Deterministic
+  ChannelSender simulator (fail→PERMANENT, flaky→TRANSIENT then success). Flyway V1 in both
+  services. Unit + Testcontainers integration tests (22 notifications → all terminal, dup submit
+  → same id + one event), k6 submit-and-poll script, ARM64 Dockerfiles.
+  Remaining for "done": deploy + k6 load evidence (`topics/notification/load/notify.js`).
