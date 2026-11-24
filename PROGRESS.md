@@ -9,7 +9,7 @@ Legend: ✔ done · ◐ in progress · blank = not started · – not applicable
 | Flash Sale             |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Notification System    |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Ticket Booking         |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
-| Banking Money Transfer |        |          |       |       |          |               |      | not started |
+| Banking Money Transfer |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Real-Time Auction      |        |          |       |       |          |               |      | not started |
 
 **Next step:** run `topics/url-shortener/load/links.js` (k6) for load evidence, then the next topic.
@@ -93,3 +93,19 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   frees the seat (re-hold 200), HELD/CONFIRMED/DECLINED events audited via Kafka booking_history.
   Integration: 100 threads hold same seat -> exactly 1 wins; sweeper frees expired holds.
   Remaining for "done": k6 load evidence (topics/ticket-booking/load/book.js).
+- 2026-11-24 — Banking Money Transfer services: `transfer-api` (POST /api/accounts,
+  POST /api/transfers — ONE Postgres txn: `INSERT ... ON CONFLICT (idempotency_key) DO NOTHING`
+  gate → `SELECT ... FOR UPDATE` on both accounts in ascending id order → funds check →
+  balance updates + DEBIT/CREDIT ledger pair + `COMPLETED`/`REJECTED` + outbox row, all atomic;
+  replay returns the stored row with `replayed:true`; statement + transfer lookups;
+  `transfers.completed`/`rejected`/`replayed` metrics) and `ledger-worker` (1s outbox relay
+  `FOR UPDATE SKIP LOCKED` → `banking-transfer.ledger.entries` keyed by transferId → mark
+  published, at-least-once; `<prefix>projection` consumer → `ledger_audit` deduped by
+  `UNIQUE(transfer_id, account_id, entry)`; GET /api/reconciliation comparing balance vs
+  Σledger vs Σledger_audit + `reconciliation.drift` gauge; per-account audit view).
+  Single-DB txn + double-entry + outbox (decision 001); idempotency + at-least-once/dedupe
+  (decision 002). Flyway V1 in both services, shared schema incl. outbox + ledger_audit.
+  Unit + Testcontainers integration tests (5× same key → 1 write/identical reply; 50 concurrent
+  ring transfers → total conserved, no negatives; outbox→relay→consumer→drift 0),
+  k6 transfer.js with reconciliation teardown, ARM64 Dockerfiles.
+  Remaining for "done": deploy + k6 load evidence (`topics/banking-transfer/load/transfer.js`).
