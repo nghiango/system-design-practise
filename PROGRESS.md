@@ -12,7 +12,7 @@ Legend: ✔ done · ◐ in progress · blank = not started · – not applicable
 | Banking Money Transfer |        |          |       |       |          |               |      | not started |
 | Real-Time Auction      |        |          |       |       |          |               |      | not started |
 
-**Next step:** URL Shortener plan (services, ID generation, load tests).
+**Next step:** run `topics/url-shortener/load/links.js` (k6) for load evidence, then the next topic.
 
 ## Foundation checklist
 Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2026-11-18-foundation.md)
@@ -45,3 +45,8 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   - `topic-switch` #2 deactivate → Application and namespace removed in ~110 s; shared-namespace policies and topic ClusterRoles removed; database and Kafka topic kept.
   - Bugs found and fixed (`44ef343`): wait script did not match pretty-printed API JSON; first build of a new topic job had no `IMAGE_PREFIX`.
 - 2026-11-21 — URL Shortener services: `link-api` (POST/GET /api/links, Flyway V1 schema, click-counter Kafka consumer, `links.created` metric) and `redirect` (GET /{code} cache-aside via Redis with 1h url / 60s NOTFOUND sentinel, best-effort click event to `url-shortener.link.clicked`). Postgres sequence + Base62 codes (decision 001); Kafka upsert counting (decision 002). Unit + Testcontainers integration tests, k6 script, ARM64 Dockerfiles.
+- 2026-11-24 — URL Shortener services live: link-api + redirect deployed via Jenkins #9 / Argo `7720786`.
+  Verified end-to-end: POST /api/links (Base62 code), GET /{code} → 302, Kafka click events → `link_clicks`
+  counter (3 clicks counted), Prometheus `topics` targets up with `topic="url-shortener"`, logs in Loki.
+  Fixes during rollout: actuator prometheus endpoint needed `management.endpoints.web.exposure.include` (bbc38c8).
+  Remaining for "done": k6 load evidence (`topics/url-shortener/load/links.js`).
