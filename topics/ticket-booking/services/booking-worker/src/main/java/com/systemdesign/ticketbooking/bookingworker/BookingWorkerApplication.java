@@ -1,0 +1,14 @@
+package com.systemdesign.ticketbooking.bookingworker;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@SpringBootApplication
+@EnableScheduling
+public class BookingWorkerApplication {
+
+  public static void main(String[] args) {
+    SpringApplication.run(BookingWorkerApplication.class, args);
+  }
+}

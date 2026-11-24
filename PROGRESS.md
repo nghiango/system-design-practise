@@ -8,7 +8,7 @@ Legend: ✔ done · ◐ in progress · blank = not started · – not applicable
 | URL Shortener          |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Flash Sale             |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Notification System    |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
-| Ticket Booking         |        |          |       |       |          |               |      | not started |
+| Ticket Booking         |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Banking Money Transfer |        |          |       |       |          |               |      | not started |
 | Real-Time Auction      |        |          |       |       |          |               |      | not started |
 
@@ -82,3 +82,9 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   permanent-fail -> DEAD, duplicate idempotency key -> same id (no double-send).
   Redis Lua token bucket (10/s/channel, Redis TIME refill), guarded status machine, DLQ topic.
   Prometheus targets up. Remaining for "done": k6 load evidence (topics/notification/load/notify.js).
+- 2026-11-24 — Ticket Booking services: booking-api (atomic guarded-UPDATE holds with 5-min TTL,
+  transactional confirm with simulated decline payment, owner-guarded release, filter-on-read seat
+  map) and booking-worker (10s UPDATE...RETURNING sweeper, booking.events → booking_history audit
+  consumer, history API). Postgres row locking (decision 001); lazy guards + sweeper (decision 002).
+  Unit + Testcontainers tests (100-thread same-seat race → exactly 1 winner), k6 book.js,
+  ARM64 Dockerfiles. Remaining for "done": deploy + k6 load evidence.
