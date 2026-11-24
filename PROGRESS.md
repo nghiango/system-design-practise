@@ -6,7 +6,7 @@ Legend: ✔ done · ◐ in progress · blank = not started · – not applicable
 |------------------------|--------|----------|-------|-------|----------|---------------|------|-------------|
 | Foundation             |   ✔    |    –     |   ✔   |   ✔   |    ✔     |      –        |  ✔   | done        |
 | URL Shortener          |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
-| Flash Sale             |        |          |       |       |          |               |      | not started |
+| Flash Sale             |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Notification System    |        |          |       |       |          |               |      | not started |
 | Ticket Booking         |        |          |       |       |          |               |      | not started |
 | Banking Money Transfer |        |          |       |       |          |               |      | not started |
@@ -50,3 +50,11 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   counter (3 clicks counted), Prometheus `topics` targets up with `topic="url-shortener"`, logs in Loki.
   Fixes during rollout: actuator prometheus endpoint needed `management.endpoints.web.exposure.include` (bbc38c8).
   Remaining for "done": k6 load evidence (`topics/url-shortener/load/links.js`).
+- 2026-11-24 — Flash Sale services: `seckill-api` (POST /api/items preloads Redis `stock:<id>`, GET /api/items
+  with live stock, POST /api/sales gated by an atomic Redis Lua check+decrement — 202/409/404/503 fail-closed,
+  `sales.accepted`/`sales.rejected` metrics, Kafka publish compensation INCR) and `order-worker` (@KafkaListener
+  `flash-sale.order.created` group `flash-sale.order-worker`, idempotent INSERT ON CONFLICT, guarded stock UPDATE,
+  drift compensation marks order failed + INCR back, GET /api/orders/{orderId}). Redis Lua gate (decision 001);
+  Kafka order events + idempotent consumer (decision 002). Unit + Testcontainers integration tests (200 racing
+  buyers on stock=100 → exactly 100 accepted), k6 oversell script, ARM64 Dockerfiles.
+  Remaining for "done": deploy + k6 load evidence (`topics/flash-sale/load/seckill.js`).
