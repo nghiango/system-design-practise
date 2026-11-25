@@ -126,3 +126,7 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   → 1 winner + 7 recorded rejections; deadline bid → 410 and closes; real WS client receives the
   real Kafka update), k6 auction.js teardown asserting highest==max submitted.
   Remaining for "done": deploy + k6 load evidence (`topics/realtime-auction/load/auction.js`).
+- 2026-11-24 — Real-Time Auction live: auction-api + auction-broadcast via Jenkins #1 / topic-switch #8.
+  Verified: bid 80 accepted (seq1), bid 70 rejected 409, bid 90 accepted (seq2), highestBidder=bob;
+  WebSocket /ws/auctions/{id} upgrade returns 101 via auction-broadcast.
+  ALL SIX TOPICS DEPLOYED.
