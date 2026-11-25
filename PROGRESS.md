@@ -10,7 +10,7 @@ Legend: ✔ done · ◐ in progress · blank = not started · – not applicable
 | Notification System    |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Ticket Booking         |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 | Banking Money Transfer |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
-| Real-Time Auction      |        |          |       |       |          |               |      | not started |
+| Real-Time Auction      |   ✔    |    ✔     |   ✔   |   ✔   |          |               |  ✔   | ◐ in progress |
 
 **Next step:** run `topics/url-shortener/load/links.js` (k6) for load evidence, then the next topic.
 
@@ -113,3 +113,16 @@ Plan: [docs/superpowers/plans/2026-11-18-foundation.md](docs/superpowers/plans/2
   Verified: transfer 30 alice->bob COMPLETED; replay same key -> same id, replayed:true (no double-post);
   overdraw -> 422 REJECTED; outbox relay -> ledger_audit; reconciliation drift=0 on both axes.
   Opening-balance CREDIT ledgered so seeded accounts reconcile. Remaining: k6 (load/transfer.js).
+- 2026-11-24 — Real-Time Auction services: `auction-api` (POST /api/auctions, POST /{id}/bids
+  in ONE txn — `SELECT ... FOR UPDATE` on the auction row as the single sequencer; closed/expired
+  → 410 (expiry lazily closes), amount ≤ COALESCE(highest,start) → recorded `accepted=false` → 409,
+  else `seq=++bid_count` → 200 {seq} + Kafka `realtime-auction.updates` keyed by auctionId ⇒
+  partition order = seq order; GET auction + accepted bids) and `auction-broadcast`
+  (WebSocket `/ws/auctions/{id}` + @KafkaListener fan-out, per-auction session map, send failures
+  drop the session, GET /api/auctions/{id}/watchers debug aid). Decisions 001 (row-lock ordering
+  vs Kafka-serialized write vs Redis lock) and 002 (separate WS broadcaster vs same-pod vs SSE vs
+  long-poll). Flyway V1 in both services. Unit + Testcontainers integration tests (100 concurrent
+  distinct bids → highest==max, seq contiguous 1..N, Kafka records arrive in seq order; equal bids
+  → 1 winner + 7 recorded rejections; deadline bid → 410 and closes; real WS client receives the
+  real Kafka update), k6 auction.js teardown asserting highest==max submitted.
+  Remaining for "done": deploy + k6 load evidence (`topics/realtime-auction/load/auction.js`).
